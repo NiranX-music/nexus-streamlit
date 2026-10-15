@@ -29,7 +29,7 @@ def get_browser_executable() -> Optional[str]:
             return c
     return None
 
-def html_to_pdf(html_content: str, timeout: int = 25) -> Optional[bytes]:
+def html_to_pdf(html_content: str, timeout: int = 45) -> Optional[bytes]:
     """
     Converts HTML string to high-fidelity PDF bytes using headless Chromium.
     Preserves CSS @page layout, 2-column styles, and KaTeX math formulas.
@@ -89,15 +89,17 @@ def zip_pdf_papers(curated_files: dict) -> io.BytesIO:
 
 def compile_test_curated_pdfs(test_meta: dict, questions: list, batch_name: str = "", use_cache: bool = True) -> dict:
     """
-    Compiles all 3 curated PDFs for a given test in parallel:
+    Compiles all 4 curated PDFs for a given test in parallel:
     - 2-Column Question Booklet PDF
+    - Questions + Answers + Solutions Manual PDF
     - Complete Solutions Paper PDF
     - Printable OMR Response Sheet PDF
-    - Curated ZIP containing all 3 PDFs in organized folders
+    - Curated ZIP containing all 4 PDFs in organized folders
     Uses SQLite binary cache to return previously compiled PDFs in 0.001 seconds!
     """
     from core.tests import (
         generate_two_column_exam_booklet,
+        generate_question_answer_solution_booklet,
         generate_test_html,
         generate_printable_omr_sheet
     )
@@ -105,7 +107,7 @@ def compile_test_curated_pdfs(test_meta: dict, questions: list, batch_name: str 
     test_id = test_meta.get("test_id") or test_meta.get("_id")
     if test_id and use_cache:
         cached = db.get_cached_curated_pdfs(test_id)
-        if cached and cached.get("booklet_pdf"):
+        if cached and cached.get("booklet_pdf") and cached.get("qna_pdf"):
             return cached
 
     t_name = test_meta.get("name", "PW_Test")
@@ -113,22 +115,27 @@ def compile_test_curated_pdfs(test_meta: dict, questions: list, batch_name: str 
 
     # Generate HTML templates
     html_booklet = generate_two_column_exam_booklet(test_meta, questions, batch_name)
+    html_qna = generate_question_answer_solution_booklet(test_meta, questions, batch_name)
     html_sol = generate_test_html(test_meta, questions, batch_name)
     html_omr = generate_printable_omr_sheet(test_meta, len(questions))
 
-    # Compile the 3 PDFs in parallel across 3 headless browser workers
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    # Compile the 4 PDFs in parallel across 4 headless browser workers
+    with ThreadPoolExecutor(max_workers=4) as executor:
         f_booklet = executor.submit(html_to_pdf, html_booklet)
+        f_qna = executor.submit(html_to_pdf, html_qna)
         f_sol = executor.submit(html_to_pdf, html_sol)
         f_omr = executor.submit(html_to_pdf, html_omr)
 
         booklet_pdf = f_booklet.result()
+        qna_pdf = f_qna.result()
         solutions_pdf = f_sol.result()
         omr_pdf = f_omr.result()
 
     curated = {}
     if booklet_pdf:
         curated[f"{safe_name}/{safe_name}_Question_Booklet.pdf"] = booklet_pdf
+    if qna_pdf:
+        curated[f"{safe_name}/{safe_name}_Questions_Answers_and_Solutions.pdf"] = qna_pdf
     if solutions_pdf:
         curated[f"{safe_name}/{safe_name}_Complete_Solutions.pdf"] = solutions_pdf
     if omr_pdf:
@@ -139,10 +146,11 @@ def compile_test_curated_pdfs(test_meta: dict, questions: list, batch_name: str 
 
     # Persist in SQLite
     if test_id and booklet_pdf:
-        db.save_curated_pdfs(test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_bytes)
+        db.save_curated_pdfs(test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_bytes, qna_pdf=qna_pdf)
 
     return {
         "booklet_pdf": booklet_pdf,
+        "qna_pdf": qna_pdf,
         "solutions_pdf": solutions_pdf,
         "omr_pdf": omr_pdf,
         "zip_pack": zip_pack

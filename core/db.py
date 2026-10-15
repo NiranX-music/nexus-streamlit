@@ -92,9 +92,14 @@ def init_db():
             solutions_pdf BLOB,
             omr_pdf BLOB,
             zip_pack BLOB,
+            qna_pdf BLOB,
             updated_at REAL
         );
         """)
+        try:
+            conn.execute("ALTER TABLE test_pdfs ADD COLUMN qna_pdf BLOB;")
+        except Exception:
+            pass
     conn.close()
 
 # --- BATCH OPERATIONS ---
@@ -258,25 +263,26 @@ def get_cached_questions(test_id: str) -> Optional[List[Dict[str, Any]]]:
     return None
 
 # --- CURATED PDF BINARY STORE ---
-def save_curated_pdfs(test_id: str, booklet_pdf: bytes, solutions_pdf: bytes, omr_pdf: bytes, zip_pack_bytes: bytes):
+def save_curated_pdfs(test_id: str, booklet_pdf: bytes, solutions_pdf: bytes, omr_pdf: bytes, zip_pack_bytes: bytes, qna_pdf: bytes = None):
     now = time.time()
     conn = get_connection()
     with conn:
         conn.execute("""
-        INSERT INTO test_pdfs (test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_pack, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO test_pdfs (test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_pack, qna_pdf, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(test_id) DO UPDATE SET
             booklet_pdf = excluded.booklet_pdf,
             solutions_pdf = excluded.solutions_pdf,
             omr_pdf = excluded.omr_pdf,
             zip_pack = excluded.zip_pack,
+            qna_pdf = excluded.qna_pdf,
             updated_at = excluded.updated_at
-        """, (test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_pack_bytes, now))
+        """, (test_id, booklet_pdf, solutions_pdf, omr_pdf, zip_pack_bytes, qna_pdf, now))
     conn.close()
 
 def get_cached_curated_pdfs(test_id: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
-    row = conn.execute("SELECT booklet_pdf, solutions_pdf, omr_pdf, zip_pack FROM test_pdfs WHERE test_id = ?", (test_id,)).fetchone()
+    row = conn.execute("SELECT booklet_pdf, solutions_pdf, omr_pdf, zip_pack, qna_pdf FROM test_pdfs WHERE test_id = ?", (test_id,)).fetchone()
     conn.close()
     if row and row["booklet_pdf"]:
         import io
@@ -285,6 +291,7 @@ def get_cached_curated_pdfs(test_id: str) -> Optional[Dict[str, Any]]:
             "booklet_pdf": row["booklet_pdf"],
             "solutions_pdf": row["solutions_pdf"],
             "omr_pdf": row["omr_pdf"],
+            "qna_pdf": row["qna_pdf"] if "qna_pdf" in row.keys() else None,
             "zip_pack": zip_io
         }
     return None

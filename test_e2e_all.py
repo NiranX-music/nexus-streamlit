@@ -116,6 +116,7 @@ if free_b:
 print("8. Testing Features 5, 7, 8 (Booklet, OMR, ICS, Obsidian Vault)...")
 from core.tests import (
     generate_two_column_exam_booklet,
+    generate_question_answer_solution_booklet,
     generate_printable_omr_sheet,
     generate_test_ics_calendar,
     export_to_obsidian_vault,
@@ -125,6 +126,11 @@ from core.pdf_exporter import html_to_pdf, compile_test_curated_pdfs, zip_pdf_pa
 booklet_html = generate_two_column_exam_booklet(wt02, qs, target_batch["name"])
 assert len(booklet_html) > 0, "Booklet HTML was empty"
 print(f"   PASS: Generated Two-Column Booklet HTML ({len(booklet_html)} bytes)")
+
+qna_html = generate_question_answer_solution_booklet(wt02, qs, target_batch["name"])
+assert len(qna_html) > 0, "QnA HTML was empty"
+assert "OFFICIAL ANSWER KEY" in qna_html, "Answer Key missing from QnA HTML"
+print(f"   PASS: Generated Q&A + Answer Key + Solution HTML ({len(qna_html)} bytes)")
 
 omr_html = generate_printable_omr_sheet(wt02, len(qs))
 assert len(omr_html) > 0, "OMR HTML was empty"
@@ -138,13 +144,15 @@ v_path, v_content = export_to_obsidian_vault(wt02, qs, target_batch["name"])
 assert os.path.exists(v_path), f"Obsidian vault file not found at {v_path}"
 print(f"   PASS: Exported Obsidian Vault Markdown to {v_path}")
 
-print("9. Testing Curated PDF Compilation Engine...")
-curated_pack = compile_test_curated_pdfs(wt02, qs[:10], target_batch["name"])
+print("9. Testing Curated PDF Compilation Engine (4 Formats + ZIP)...")
+curated_pack = compile_test_curated_pdfs(wt02, qs[:10], target_batch["name"], use_cache=False)
 assert curated_pack["booklet_pdf"] is not None and len(curated_pack["booklet_pdf"]) > 1000, "Booklet PDF empty"
+assert curated_pack["qna_pdf"] is not None and len(curated_pack["qna_pdf"]) > 1000, "QnA with Solutions PDF empty"
 assert curated_pack["solutions_pdf"] is not None and len(curated_pack["solutions_pdf"]) > 1000, "Solutions PDF empty"
 assert curated_pack["omr_pdf"] is not None and len(curated_pack["omr_pdf"]) > 1000, "OMR PDF empty"
 assert curated_pack["zip_pack"] is not None and curated_pack["zip_pack"].getbuffer().nbytes > 5000, "Curated ZIP empty"
 print(f"   PASS: Compiled Booklet PDF ({len(curated_pack['booklet_pdf'])} bytes)")
+print(f"   PASS: Compiled Q&A + Solutions PDF ({len(curated_pack['qna_pdf'])} bytes)")
 print(f"   PASS: Compiled Solutions PDF ({len(curated_pack['solutions_pdf'])} bytes)")
 print(f"   PASS: Compiled OMR PDF ({len(curated_pack['omr_pdf'])} bytes)")
 print(f"   PASS: Compiled Curated PDFs ZIP ({curated_pack['zip_pack'].getbuffer().nbytes} bytes)")

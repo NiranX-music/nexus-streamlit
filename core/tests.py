@@ -1873,3 +1873,485 @@ def export_to_obsidian_vault(test_meta: dict, questions: list, batch_name: str =
 
     return filepath, content
 
+
+def generate_question_answer_solution_booklet(test_meta: dict, questions: list, batch_name: str = "") -> str:
+    """
+    Generates a dedicated, publication-grade printable HTML document containing:
+    - Complete Question Statement & Formulas (KaTeX MathJax)
+    - Question Diagrams
+    - Options with highlighted correct choice
+    - Prominent Official Correct Answer Banner
+    - Comprehensive Step-by-Step Solution & Explanatory Graphics
+    - Complete Final Answer Key Grid
+    Designed specifically for high-fidelity A4 PDF rendering via headless Chromium.
+    """
+    t_name = test_meta.get("name", "PW Test Paper")
+    total_q = test_meta.get("total_questions", len(questions))
+    total_marks = test_meta.get("total_marks", total_q * 4)
+    duration = test_meta.get("max_duration", 180)
+    start_date = test_meta.get("formatted_start_date") or "Scheduled Examination"
+
+    option_letters = ["A", "B", "C", "D", "E", "F"]
+    q_cards_html = []
+    answer_key_rows = []
+
+    for q in questions:
+        q_num = q.get("question_number")
+        q_txt = q.get("question_text", "")
+        q_img = q.get("question_image_url")
+        pos = q.get("positive_marks", 4)
+        neg = q.get("negative_marks", 1)
+        q_type = q.get("type", "Single Choice")
+        sol_img = q.get("solution_image_url")
+        sol_txt = q.get("solution_text", "")
+        vid = q.get("video_url")
+
+        # Options HTML & Find Correct Choice
+        opt_html_list = []
+        correct_letter = "N/A"
+        correct_text = ""
+
+        for idx, opt in enumerate(q.get("options", [])):
+            letter = option_letters[idx] if idx < len(option_letters) else str(idx + 1)
+            t = opt.get("text") or ""
+            img = opt.get("image_url")
+            is_c = opt.get("is_correct")
+
+            body = t
+            if img:
+                body += f'<br/><img src="{img}" style="max-height:60px; margin-top:4px;" />'
+
+            if is_c:
+                correct_letter = letter
+                correct_text = t or f"Option ({letter})"
+                opt_html_list.append(f"""
+                <div class="opt-box opt-correct">
+                    <span class="opt-badge">({letter})</span>
+                    <span class="opt-body">{body}</span>
+                    <span class="opt-check">✓ Correct</span>
+                </div>
+                """)
+            else:
+                opt_html_list.append(f"""
+                <div class="opt-box">
+                    <span class="opt-badge">({letter})</span>
+                    <span class="opt-body">{body}</span>
+                </div>
+                """)
+
+        answer_key_rows.append((q_num, correct_letter))
+
+        q_img_html = f'<div class="q-img-wrap"><img src="{q_img}" /></div>' if q_img else ""
+        sol_img_html = f'<div class="sol-img-wrap"><img src="{sol_img}" /></div>' if sol_img else ""
+        sol_vid_html = f'<div class="sol-vid-wrap">🎥 <i>Video solution available in online portal</i></div>' if vid else ""
+
+        sol_content_html = ""
+        if sol_txt or sol_img or vid:
+            sol_content_html = f"""
+            <div class="solution-card">
+                <div class="solution-header">
+                    <span class="sol-icon">💡</span>
+                    <span>Step-by-Step Explanation & Derivation</span>
+                </div>
+                {f'<div class="sol-text">{sol_txt}</div>' if sol_txt else ''}
+                {sol_img_html}
+                {sol_vid_html}
+            </div>
+            """
+        else:
+            sol_content_html = """
+            <div class="solution-card">
+                <div class="solution-header">
+                    <span class="sol-icon">💡</span>
+                    <span>Answer Explanation</span>
+                </div>
+                <div class="sol-text">Direct conceptual / formula application. Refer to standard textbook definitions.</div>
+            </div>
+            """
+
+        q_cards_html.append(f"""
+        <div class="qna-card">
+            <div class="qna-header">
+                <span class="q-badge">Question {q_num}</span>
+                <span class="q-meta">{q_type}</span>
+                <span class="q-marks">Marks: +{pos} / -{neg}</span>
+            </div>
+            <div class="qna-statement">
+                {q_txt}
+                {q_img_html}
+            </div>
+            <div class="options-container">
+                {''.join(opt_html_list)}
+            </div>
+            <div class="correct-answer-banner">
+                <span class="ca-tag">🎯 OFFICIAL ANSWER KEY:</span>
+                <span class="ca-value">Option ({correct_letter})</span>
+                {f'<span class="ca-detail">— {correct_text}</span>' if correct_text else ''}
+            </div>
+            {sol_content_html}
+        </div>
+        """)
+
+    # Build Quick Answer Key Table Grid
+    ak_cells = []
+    for q_n, c_l in answer_key_rows:
+        ak_cells.append(f"""
+        <div class="ak-cell">
+            <span class="ak-q">Q{q_n}</span>
+            <span class="ak-ans">{c_l}</span>
+        </div>
+        """)
+
+    html_template = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{t_name} - Questions, Solutions & Answer Key</title>
+    <script>
+    window.MathJax = {{
+        tex: {{
+            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+            processEscapes: true
+        }},
+        svg: {{ fontCache: 'global' }}
+    }};
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        @page {{
+            size: A4 portrait;
+            margin: 14mm 14mm 16mm 14mm;
+            @bottom-right {{
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+                font-size: 8.5pt;
+                color: #64748b;
+            }}
+            @bottom-left {{
+                content: "Nexus Streamlit | Question, Solution & Answer Manual";
+                font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+                font-size: 8.5pt;
+                color: #64748b;
+            }}
+        }}
+
+        * {{
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }}
+
+        body {{
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #0f172a;
+            background: #ffffff;
+            font-size: 13.5px;
+            line-height: 1.6;
+        }}
+
+        /* Document Header */
+        .doc-header {{
+            border-bottom: 2.5px solid #0f172a;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }}
+        .doc-title-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }}
+        .brand-badge {{
+            background: #0f172a;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: inline-block;
+            margin-bottom: 6px;
+        }}
+        .test-name {{
+            font-size: 20px;
+            font-weight: 900;
+            color: #0f172a;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.3px;
+        }}
+        .batch-name {{
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+        }}
+        .meta-strip {{
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #334155;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-weight: 600;
+        }}
+
+        /* Question Card */
+        .qna-card {{
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            background: #ffffff;
+            page-break-inside: avoid;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            overflow: hidden;
+        }}
+        .qna-header {{
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 7px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .q-badge {{
+            background: #0f172a;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }}
+        .q-meta {{
+            font-size: 11px;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+        }}
+        .q-marks {{
+            margin-left: auto;
+            font-size: 11px;
+            font-weight: 700;
+            color: #0369a1;
+            background: #e0f2fe;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }}
+
+        .qna-statement {{
+            padding: 12px 14px 8px 14px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #0f172a;
+        }}
+        .q-img-wrap {{
+            text-align: center;
+            margin: 10px 0;
+        }}
+        .q-img-wrap img {{
+            max-width: 90%;
+            max-height: 240px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px;
+        }}
+
+        /* Options */
+        .options-container {{
+            padding: 0 14px 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }}
+        .opt-box {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            background: #fafafa;
+        }}
+        .opt-box.opt-correct {{
+            border: 1.5px solid #10b981;
+            background: #f0fdf4;
+            font-weight: 600;
+            color: #065f46;
+        }}
+        .opt-badge {{
+            font-weight: 800;
+            color: #475569;
+            width: 24px;
+        }}
+        .opt-correct .opt-badge {{
+            color: #059669;
+        }}
+        .opt-body {{
+            flex-grow: 1;
+        }}
+        .opt-check {{
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #059669;
+            background: #d1fae5;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }}
+
+        /* Correct Answer Banner */
+        .correct-answer-banner {{
+            background: #ecfdf5;
+            border-top: 1px solid #a7f3d0;
+            border-bottom: 1px solid #a7f3d0;
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }}
+        .ca-tag {{
+            font-weight: 800;
+            color: #065f46;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }}
+        .ca-value {{
+            font-weight: 900;
+            color: #047857;
+            background: #d1fae5;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }}
+        .ca-detail {{
+            color: #0f172a;
+            font-weight: 500;
+        }}
+
+        /* Solution Card */
+        .solution-card {{
+            background: #f8fafc;
+            border-left: 4px solid #6366f1;
+            padding: 10px 14px;
+            margin: 0;
+            font-size: 13px;
+        }}
+        .solution-header {{
+            font-size: 11.5px;
+            font-weight: 800;
+            color: #4338ca;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .sol-text {{
+            color: #1e293b;
+            line-height: 1.6;
+        }}
+        .sol-img-wrap {{
+            text-align: center;
+            margin: 8px 0;
+        }}
+        .sol-img-wrap img {{
+            max-width: 90%;
+            max-height: 220px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px;
+            background: #ffffff;
+        }}
+        .sol-vid-wrap {{
+            font-size: 11px;
+            color: #6366f1;
+            margin-top: 6px;
+        }}
+
+        /* Final Answer Key Summary Section */
+        .answer-key-section {{
+            page-break-before: always;
+            border-top: 2px solid #0f172a;
+            padding-top: 16px;
+            margin-top: 24px;
+        }}
+        .ak-title {{
+            font-size: 18px;
+            font-weight: 900;
+            color: #0f172a;
+            margin-bottom: 12px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .ak-grid {{
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 6px;
+            margin-top: 14px;
+        }}
+        .ak-cell {{
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            text-align: center;
+            padding: 6px 2px;
+            background: #f8fafc;
+        }}
+        .ak-q {{
+            display: block;
+            font-size: 10px;
+            color: #64748b;
+            font-weight: 700;
+        }}
+        .ak-ans {{
+            display: block;
+            font-size: 14px;
+            color: #047857;
+            font-weight: 900;
+        }}
+    </style>
+</head>
+<body>
+
+    <div class="doc-header">
+        <div class="doc-title-row">
+            <div>
+                <span class="brand-badge">Nexus Streamlit | Sovereign Q&A Manual</span>
+                <h1 class="test-name">{t_name}</h1>
+                <div class="batch-name">📚 Batch: {batch_name or 'PW Enrolled Batch'}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; font-weight:700; color:#64748b;">FORMAT: QUESTION + ANSWER + DETAILED SOLUTION</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:2px;">Generated: {start_date}</div>
+            </div>
+        </div>
+        <div class="meta-strip">
+            <span>❓ Total Questions: <b>{total_q}</b></span>
+            <span>🎯 Maximum Marks: <b>{total_marks}</b></span>
+            <span>⏱️ Standard Duration: <b>{duration} Mins</b></span>
+            <span>✅ Answer Key: <b>Verified Official</b></span>
+        </div>
+    </div>
+
+    <!-- Questions, Correct Answers & Solutions -->
+    {''.join(q_cards_html)}
+
+    <!-- Quick Reference Answer Key Grid -->
+    <div class="answer-key-section">
+        <div class="ak-title">🎯 Quick Reference Answer Key</div>
+        <div class="ak-grid">
+            {''.join(ak_cells)}
+        </div>
+    </div>
+
+</body>
+</html>
+"""
+    return html_template
+
+

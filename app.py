@@ -52,6 +52,7 @@ from core.tests import (
     generate_test_json,
     zip_test_papers,
     generate_two_column_exam_booklet,
+    generate_question_answer_solution_booklet,
     generate_printable_omr_sheet,
     generate_test_ics_calendar,
     export_to_obsidian_vault,
@@ -997,14 +998,18 @@ def main():
                                         b_pdf = html_to_pdf(b_html)
                                         if b_pdf:
                                             curated_pdf_dict[f"01_Question_Papers_2Column/{safe_name}_Question_Booklet.pdf"] = b_pdf
+                                        q_html = generate_question_answer_solution_booklet(t, qs, b_info["name"])
+                                        q_pdf = html_to_pdf(q_html)
+                                        if q_pdf:
+                                            curated_pdf_dict[f"02_Questions_with_Solutions_and_Answers/{safe_name}_QnA_with_Solutions.pdf"] = q_pdf
                                         s_html = generate_test_html(t, qs, b_info["name"])
                                         s_pdf = html_to_pdf(s_html)
                                         if s_pdf:
-                                            curated_pdf_dict[f"02_Complete_Solutions_Papers/{safe_name}_Solutions.pdf"] = s_pdf
+                                            curated_pdf_dict[f"03_Complete_Solutions_Papers/{safe_name}_Solutions.pdf"] = s_pdf
                                         o_html = generate_printable_omr_sheet(t, len(qs))
                                         o_pdf = html_to_pdf(o_html)
                                         if o_pdf:
-                                            curated_pdf_dict[f"03_Printable_OMR_Sheets/{safe_name}_OMR_Sheet.pdf"] = o_pdf
+                                            curated_pdf_dict[f"04_Printable_OMR_Sheets/{safe_name}_OMR_Sheet.pdf"] = o_pdf
                                 prog.empty()
 
                                 if curated_pdf_dict:
@@ -1411,8 +1416,9 @@ def main():
                 )
                 st.markdown("""
                 - `📁 01_Question_Papers_2Column/`: Authentic 2-column examination booklets for printing
-                - `📁 02_Complete_Solutions_Papers/`: Comprehensive question-by-question solution manuals
-                - `📁 03_Printable_OMR_Sheets/`: Official NTA/PW standard bubble response sheets
+                - `📁 02_Questions_with_Solutions_and_Answers/`: Dedicated Q&A + Correct Answer + Detailed Solution Manuals
+                - `📁 03_Complete_Solutions_Papers/`: Comprehensive question-by-question solution manuals
+                - `📁 04_Printable_OMR_Sheets/`: Official NTA/PW standard bubble response sheets
                 """)
 
                 max_t = len(b_tests)
@@ -1431,14 +1437,18 @@ def main():
                             b_pdf = html_to_pdf(b_html)
                             if b_pdf:
                                 curated_pdf_dict[f"01_Question_Papers_2Column/{safe_name}_Question_Booklet.pdf"] = b_pdf
+                            q_html = generate_question_answer_solution_booklet(t, qs, sel_batch["name"])
+                            q_pdf = html_to_pdf(q_html)
+                            if q_pdf:
+                                curated_pdf_dict[f"02_Questions_with_Solutions_and_Answers/{safe_name}_QnA_with_Solutions.pdf"] = q_pdf
                             s_html = generate_test_html(t, qs, sel_batch["name"])
                             s_pdf = html_to_pdf(s_html)
                             if s_pdf:
-                                curated_pdf_dict[f"02_Complete_Solutions_Papers/{safe_name}_Complete_Solutions.pdf"] = s_pdf
+                                curated_pdf_dict[f"03_Complete_Solutions_Papers/{safe_name}_Complete_Solutions.pdf"] = s_pdf
                             o_html = generate_printable_omr_sheet(t, len(qs))
                             o_pdf = html_to_pdf(o_html)
                             if o_pdf:
-                                curated_pdf_dict[f"03_Printable_OMR_Sheets/{safe_name}_OMR_Response_Sheet.pdf"] = o_pdf
+                                curated_pdf_dict[f"04_Printable_OMR_Sheets/{safe_name}_OMR_Response_Sheet.pdf"] = o_pdf
                     p.empty()
 
                     if curated_pdf_dict:
@@ -1660,6 +1670,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
                         st.session_state[f"qs_cache_{test_id}"] = qs
                         st.session_state[f"html_{test_id}"] = generate_test_html(t, qs, batch_name)
                         st.session_state[f"booklet_{test_id}"] = generate_two_column_exam_booklet(t, qs, batch_name)
+                        st.session_state[f"qna_{test_id}"] = generate_question_answer_solution_booklet(t, qs, batch_name)
                         st.session_state[f"omr_{test_id}"] = generate_printable_omr_sheet(t, len(qs))
                         st.session_state[f"json_{test_id}"] = generate_test_json(t, qs)
                         st.session_state[f"md_{test_id}"] = generate_test_markdown(t, qs)
@@ -1718,7 +1729,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
             </div>
             """, unsafe_allow_html=True)
 
-            p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+            p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns(5)
             with p_col1:
                 if c_data.get("booklet_pdf"):
                     st.download_button(
@@ -1730,16 +1741,26 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
                         use_container_width=True
                     )
             with p_col2:
+                if c_data.get("qna_pdf"):
+                    st.download_button(
+                        label="📗 Q&A + Sol (PDF)",
+                        data=c_data["qna_pdf"],
+                        file_name=f"{safe_name}_Questions_Answers_and_Solutions.pdf",
+                        mime="application/pdf",
+                        key=f"dl_pdf_qna_{batch_id}_{test_id}",
+                        use_container_width=True
+                    )
+            with p_col3:
                 if c_data.get("solutions_pdf"):
                     st.download_button(
-                        label="📗 Solutions (PDF)",
+                        label="📘 Solutions (PDF)",
                         data=c_data["solutions_pdf"],
                         file_name=f"{safe_name}_Complete_Solutions.pdf",
                         mime="application/pdf",
                         key=f"dl_pdf_sol_{batch_id}_{test_id}",
                         use_container_width=True
                     )
-            with p_col3:
+            with p_col4:
                 if c_data.get("omr_pdf"):
                     st.download_button(
                         label="🎯 OMR Sheet (PDF)",
@@ -1749,7 +1770,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
                         key=f"dl_pdf_omr_{batch_id}_{test_id}",
                         use_container_width=True
                     )
-            with p_col4:
+            with p_col5:
                 if c_data.get("zip_pack"):
                     st.download_button(
                         label="📦 Curated Pack (ZIP)",
