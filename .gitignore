@@ -1,0 +1,32 @@
+# Credentials and sensitive tokens
+data/token.txt
+*.token
+.env
+.env.*
+
+# Local databases and WAL logs
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.db
+*.sqlite3
+
+# Downloads and archives
+Nexus_Downloads/
+PW_Downloads/
+*.zip
+*.pdf
+
+# Python virtual environment and caches
+venv/
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS specific files
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
