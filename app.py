@@ -990,7 +990,7 @@ def main():
                                 prog = st.progress(0, text="Compiling curated PDFs for batch...")
                                 for idx, t in enumerate(b_tests):
                                     prog.progress((idx + 1) / len(b_tests), text=f"Compiling {t['name']} PDFs ({idx+1}/{len(b_tests)})...")
-                                    qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=b_id)
+                                    qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=b_id, test_meta=t)
                                     if qs:
                                         safe_name = "".join([c if c.isalnum() or c in " ._-" else "_" for c in t["name"]])
                                         b_html = generate_two_column_exam_booklet(t, qs, b_info["name"])
@@ -1025,7 +1025,7 @@ def main():
                                 prog = st.progress(0, text="Extracting batch tests...")
                                 for idx, t in enumerate(b_tests):
                                     prog.progress((idx + 1) / len(b_tests), text=f"Extracting {t['name']} ({idx+1}/{len(b_tests)})...")
-                                    qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=b_id)
+                                    qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=b_id, test_meta=t)
                                     if qs:
                                         safe_name = "".join([c if c.isalnum() or c in " ._-" else "_" for c in t["name"]])
                                         zip_files_dict[f"{safe_name}.html"] = generate_test_html(t, qs, b_info["name"])
@@ -1318,7 +1318,7 @@ def main():
             synced_count = 0
             for idx, t in enumerate(b_tests):
                 prog.progress((idx + 1) / len(b_tests), text=f"Writing {t['name']} to vault...")
-                qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id)
+                qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id, test_meta=t)
                 if qs:
                     export_to_obsidian_vault(t, qs, sel_batch["name"], DEFAULT_VAULT_DIR)
                     synced_count += 1
@@ -1424,7 +1424,7 @@ def main():
                     tests_to_process = b_tests[:limit_tests]
                     for idx, t in enumerate(tests_to_process):
                         p.progress((idx + 1) / len(tests_to_process), text=f"Compiling {t['name']} PDFs ({idx+1}/{len(tests_to_process)})...")
-                        qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id)
+                        qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id, test_meta=t)
                         if qs:
                             safe_name = "".join([c if c.isalnum() or c in " ._-" else "_" for c in t["name"]])
                             b_html = generate_two_column_exam_booklet(t, qs, sel_batch["name"])
@@ -1464,7 +1464,7 @@ def main():
                     p = st.progress(0, text="Extracting papers...")
                     for idx, t in enumerate(b_tests):
                         p.progress((idx + 1) / len(b_tests), text=f"Processing {t['name']}...")
-                        qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id)
+                        qs = fetch_test_questions(token, mapping_id=t.get("mapping_id"), test_id=t["test_id"], batch_id=sel_batch_id, test_meta=t)
                         if qs:
                             safe_name = "".join([c if c.isalnum() or c in " ._-" else "_" for c in t["name"]])
                             zip_dict[f"tests/{safe_name}.html"] = generate_test_html(t, qs, sel_batch["name"])
@@ -1603,6 +1603,15 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
 
     free_badge = '<span class="pill-badge-free">Free</span>' if is_free else ''
 
+    if is_att:
+        unlock_badge = "🔄 Attempted (Live Solutions)"
+    elif timeline == "live":
+        unlock_badge = "🟢 Live Window (Auto-Unlock)"
+    elif timeline == "future":
+        unlock_badge = "🟣 Upcoming (Syllabus & Blueprint Ready)"
+    else:
+        unlock_badge = "⚡ Syllabus & Blueprint Dossier Ready"
+
     with st.container():
         st.markdown(f"""
         <div class="pw-test-card">
@@ -1615,7 +1624,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
                 <span>❓ {q_cnt} Questions</span>
                 <span>🎯 {marks} Marks</span>
                 <span>⏱️ {dur} Mins</span>
-                <span>{'🔄 Attempted' if is_att else '⚡ Server-Unlock Ready'}</span>
+                <span>{unlock_badge}</span>
             </div>
             <div class="test-date-row">
                 <span>📅 <b>Starts:</b> {start_d}</span>
@@ -1646,7 +1655,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
             btn_label = "⚡ Re-compile Curated PDFs" if has_curated_pdf else "⚡ Generate Curated PDFs"
             if st.button(btn_label, key=f"ext_{batch_id}_{test_id}", type="primary", use_container_width=True):
                 with st.spinner("Extracting questions & compiling pixel-perfect PDFs..."):
-                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id)
+                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id, test_meta=t)
                     if qs:
                         st.session_state[f"qs_cache_{test_id}"] = qs
                         st.session_state[f"html_{test_id}"] = generate_test_html(t, qs, batch_name)
@@ -1666,7 +1675,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
             if st.button("⚡ Save to Vault", key=f"vlt_{batch_id}_{test_id}", use_container_width=True):
                 with st.spinner("Saving to Nexus Obsidian Vault..."):
                     if f"qs_cache_{test_id}" not in st.session_state:
-                        qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id)
+                        qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id, test_meta=t)
                         st.session_state[f"qs_cache_{test_id}"] = qs
                     else:
                         qs = st.session_state[f"qs_cache_{test_id}"]
@@ -1688,7 +1697,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
                 )
             else:
                 if st.button("📄 Quick Web HTML", key=f"q_html_{batch_id}_{test_id}", use_container_width=True):
-                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id)
+                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id, test_meta=t)
                     if qs:
                         st.session_state[f"qs_cache_{test_id}"] = qs
                         st.session_state[f"html_{test_id}"] = generate_test_html(t, qs, batch_name)
@@ -1755,7 +1764,7 @@ def _render_super_test_card(token: str, t: dict, batch_id: str, batch_name: str)
         if st.session_state.get(f"preview_open_{batch_id}_{test_id}"):
             if f"qs_cache_{test_id}" not in st.session_state:
                 with st.spinner("Loading preview..."):
-                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id)
+                    qs = fetch_test_questions(token, mapping_id=mapping_id, test_id=test_id, batch_id=batch_id, test_meta=t)
                     st.session_state[f"qs_cache_{test_id}"] = qs
             else:
                 qs = st.session_state[f"qs_cache_{test_id}"]

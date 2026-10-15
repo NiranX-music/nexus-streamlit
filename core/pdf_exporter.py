@@ -42,18 +42,23 @@ def html_to_pdf(html_content: str, timeout: int = 25) -> Optional[bytes]:
     temp_html = os.path.join(temp_dir, "input.html")
     temp_pdf = os.path.join(temp_dir, "output.pdf")
 
+    user_data = os.path.join(temp_dir, "profile")
+    file_url = f"file:///{os.path.abspath(temp_html).replace(os.sep, '/')}"
+
     try:
         with open(temp_html, "w", encoding="utf-8") as f:
             f.write(html_content)
 
         cmd = [
             browser_bin,
-            "--headless",
+            "--headless=new",
+            "--no-sandbox",
             "--disable-gpu",
             "--no-pdf-header-footer",
-            "--run-all-compositor-stages-before-draw",
+            "--disable-extensions",
+            f"--user-data-dir={user_data}",
             f"--print-to-pdf={temp_pdf}",
-            temp_html
+            file_url
         ]
 
         res = subprocess.run(cmd, capture_output=True, timeout=timeout)
